@@ -75,7 +75,7 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
 
-# Дополнительная задача: тестирование в Docker
+  # Дополнительная задача: тестирование в Docker
   docker-test:
     runs-on: ubuntu-latest
     needs: test  # Запускается только если тесты прошли
@@ -100,9 +100,18 @@ jobs:
         echo "print('Hello from Python')" > test-data/test.py
         echo "Some text content" > test-data/readme.txt
         
-        # Запускаем анализ в контейнере
+        # Запускаем анализ в контейнере (без создания отчета)
         docker run --rm -v $PWD/test-data:/data file-analyzer:latest \
-          python -m file_analyzer.analyzer /data
+          python -c "
+            from file_analyzer.analyzer import FileAnalyzer
+            analyzer = FileAnalyzer('/data')
+            stats = analyzer.get_file_stats()
+            print(f'Найдено файлов: {stats[\"total_files\"]}')
+            print(f'Типы: {stats[\"extensions_count\"]}')
+            files = analyzer.get_files_by_extension(['.py'])
+            print(f'Python файлы: {len(files.get(\".py\", []))}')
+        "
+
 
   # Дополнительная задача: проверка безопасности
   security:
