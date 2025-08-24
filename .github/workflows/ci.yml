@@ -1,5 +1,9 @@
 name: CI Pipeline
 
+permissions:
+  contents: read
+  packages: write
+
 # Когда запускать workflow
 on:
   push:
