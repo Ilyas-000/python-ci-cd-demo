@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 COPY file_analyzer/ ./file_analyzer/
 COPY tests/ ./tests/
 
+# ВАЖНО: Добавляем текущую папку в PYTHONPATH
+ENV PYTHONPATH=/app
+
 # Создаем непривилегированного пользователя
 RUN adduser --disabled-password --gecos '' appuser && \
     chown -R appuser:appuser /app

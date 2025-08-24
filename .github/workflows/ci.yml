@@ -4,6 +4,7 @@ name: CI Pipeline
 on:
   push:
     branches: [ main, develop ]
+    tags: [ 'v*' ]  # Для релизов
   pull_request:
     branches: [ main ]
 
@@ -11,22 +12,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         python-version: [3.8, 3.9, "3.10", "3.11"]
-    
+
     steps:
     # Шаг 1: Скачиваем код из репозитория
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     # Шаг 2: Устанавливаем Python
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     # Шаг 3: Кешируем зависимости для ускорения
     - name: Cache pip dependencies
       uses: actions/cache@v3
@@ -35,14 +36,14 @@ jobs:
         key: ${{ runner.os }}-pip-${{ hashFiles('requirements-dev.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
-    
+
     # Шаг 4: Устанавливаем зависимости
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    
+
     # Шаг 5: Проверяем стиль кода с помощью flake8
     - name: Lint with flake8
       run: |
@@ -50,22 +51,22 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # Предупреждения о стиле кода (не останавливают сборку)
         flake8 . --count --max-line-length=88 --statistics
-    
+
     # Шаг 6: Проверяем форматирование кода с помощью black
     - name: Check code formatting with black
       run: |
         black --check --diff .
-    
+
     # Шаг 7: Проверяем типы с помощью mypy
     - name: Type check with mypy
       run: |
         mypy file_analyzer/ --ignore-missing-imports
-    
+
     # Шаг 8: Запускаем тесты с покрытием
     - name: Test with pytest
       run: |
         pytest tests/ -v --cov=file_analyzer --cov-report=xml --cov-report=html
-    
+
     # Шаг 9: Загружаем отчет о покрытии в Codecov (опционально)
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -100,16 +101,17 @@ jobs:
         echo "print('Hello from Python')" > test-data/test.py
         echo "Some text content" > test-data/readme.txt
         
-        # Запускаем анализ в контейнере (без создания отчета)
-        docker run --rm -v $PWD/test-data:/data file-analyzer:latest \
-          python -c "
-            from file_analyzer.analyzer import FileAnalyzer
-            analyzer = FileAnalyzer('/data')
-            stats = analyzer.get_file_stats()
-            print(f'Найдено файлов: {stats[\"total_files\"]}')
-            print(f'Типы: {stats[\"extensions_count\"]}')
-            files = analyzer.get_files_by_extension(['.py'])
-            print(f'Python файлы: {len(files.get(\".py\", []))}')
+        # Запускаем анализ в контейнере
+        docker run --rm -v $PWD/test-data:/data file-analyzer:latest python -c "
+        import sys
+        sys.path.insert(0, '/app')
+        from file_analyzer.analyzer import FileAnalyzer
+        analyzer = FileAnalyzer('/data')
+        stats = analyzer.get_file_stats()
+        print('Найдено файлов:', stats['total_files'])
+        print('Типы:', stats['extensions_count'])
+        files = analyzer.get_files_by_extension(['.py'])
+        print('Python файлы:', len(files.get('.py', [])))
         "
 
 
@@ -129,8 +131,82 @@ jobs:
     
     - name: Install safety
       run: pip install safety
-    
+
     # Проверяем известные уязвимости в зависимостях
     - name: Check for security vulnerabilities
       run: |
         pip freeze | safety check --json || echo "Some vulnerabilities found, check logs"
+
+  # Deployment: публикация Docker образа
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test, docker-test, security]  # Запускается только после успешных тестов
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'  # Только для main ветки
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}/file-analyzer
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha
+          type=raw,value=latest
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Release: создание релиза при наличии тега
+  release:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: startsWith(github.ref, 'refs/tags/v')  # Только для тегов версий
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          🚀 **File Analyzer ${{ github.ref }}**
+          
+          ## 📦 Docker Image
+          ```bash
+          docker pull ghcr.io/${{ github.repository }}/file-analyzer:latest
+          docker run -v /path/to/analyze:/data ghcr.io/${{ github.repository }}/file-analyzer:latest python -m file_analyzer.analyzer /data
+          ```
+          
+          ## 📋 Changes
+          - Automated release via GitHub Actions
+          - Docker image published to GitHub Container Registry
+          - Full CI/CD pipeline with tests and security checks
+        draft: false
+        prerelease: false
