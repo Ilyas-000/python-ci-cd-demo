@@ -1,9 +1,8 @@
 """
 File Analyzer - Утилита для анализа файлов
 """
-
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, DefaultDict
 from collections import defaultdict
 import json
 
@@ -29,9 +28,7 @@ class FileAnalyzer:
 
         self.directory = directory
 
-    def get_files_by_extension(
-        self, extensions: Optional[List[str]] = None
-    ) -> Dict[str, List[str]]:
+    def get_files_by_extension(self, extensions: Optional[List[str]] = None) -> Dict[str, List[str]]:
         """
         Группирует файлы по расширениям.
 
@@ -56,7 +53,7 @@ class FileAnalyzer:
 
         return dict(files_by_ext)
 
-    def get_file_stats(self) -> Dict[str, any]:
+    def get_file_stats(self) -> Dict[str, Any]:
         """
         Собирает статистику по файлам.
 
@@ -65,7 +62,7 @@ class FileAnalyzer:
         """
         total_files = 0
         total_size = 0
-        extensions_count = defaultdict(int)
+        extensions_count: DefaultDict[str, int] = defaultdict(int)
 
         for root, dirs, files in os.walk(self.directory):
             for file in files:
@@ -82,13 +79,13 @@ class FileAnalyzer:
                     continue
 
         return {
-            "total_files": total_files,
-            "total_size_bytes": total_size,
-            "total_size_mb": round(total_size / (1024 * 1024), 2),
-            "extensions_count": dict(extensions_count),
+            'total_files': total_files,
+            'total_size_bytes': total_size,
+            'total_size_mb': round(total_size / (1024 * 1024), 2),
+            'extensions_count': dict(extensions_count)
         }
 
-    def find_large_files(self, min_size_mb: float = 10.0) -> List[Dict[str, any]]:
+    def find_large_files(self, min_size_mb: float = 10.0) -> List[Dict[str, Any]]:
         """
         Находит большие файлы.
 
@@ -107,20 +104,18 @@ class FileAnalyzer:
                 try:
                     file_size = os.path.getsize(file_path)
                     if file_size >= min_size_bytes:
-                        large_files.append(
-                            {
-                                "path": file_path,
-                                "size_bytes": file_size,
-                                "size_mb": round(file_size / (1024 * 1024), 2),
-                            }
-                        )
+                        large_files.append({
+                            'path': file_path,
+                            'size_bytes': file_size,
+                            'size_mb': round(file_size / (1024 * 1024), 2)
+                        })
                 except OSError:
                     continue
 
         # Сортируем по размеру (от большего к меньшему)
-        return sorted(large_files, key=lambda x: x["size_bytes"], reverse=True)
+        return sorted(large_files, key=lambda x: x['size_bytes'], reverse=True)
 
-    def generate_report(self, output_file: str = "file_report.json") -> str:
+    def generate_report(self, output_file: str = 'file_report.json') -> str:
         """
         Генерирует полный отчет и сохраняет в файл.
 
@@ -135,14 +130,14 @@ class FileAnalyzer:
         large_files = self.find_large_files()
 
         report = {
-            "directory": self.directory,
-            "statistics": stats,
-            "files_by_extension": files_by_ext,
-            "large_files": large_files[:10],  # Топ 10 самых больших файлов
+            'directory': self.directory,
+            'statistics': stats,
+            'files_by_extension': files_by_ext,
+            'large_files': large_files[:10]  # Топ 10 самых больших файлов
         }
 
         output_path = os.path.join(self.directory, output_file)
-        with open(output_path, "w", encoding="utf-8") as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
 
         return output_path
@@ -169,7 +164,7 @@ def main():
         print(f"Общий размер: {stats['total_size_mb']} МБ")
 
         print("\nТипы файлов:")
-        for ext, count in stats["extensions_count"].items():
+        for ext, count in stats['extensions_count'].items():
             ext_display = ext if ext else "без расширения"
             print(f"  {ext_display}: {count}")
 
