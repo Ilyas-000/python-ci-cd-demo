@@ -141,11 +141,18 @@ class FileAnalyzer:
             "large_files": large_files[:10],  # Топ 10 самых больших файлов
         }
 
+        # Пытаемся сохранить в анализируемую директорию
         output_path = os.path.join(self.directory, output_file)
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2, ensure_ascii=False)
-
-        return output_path
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+            return output_path
+        except PermissionError:
+            # Если нет прав, сохраняем в текущую директорию
+            fallback_path = output_file
+            with open(fallback_path, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+            return fallback_path
 
 
 def main():
