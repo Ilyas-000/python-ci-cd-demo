@@ -175,7 +175,7 @@ def main():
 
         large_files = analyzer.find_large_files(5.0)  # Файлы больше 5 МБ
         if large_files:
-            print(f"\nБольшие файлы (>5 МБ):")
+            print("\nБольшие файлы (>5 МБ):")
             for file_info in large_files[:5]:  # Топ 5
                 print(f"  {file_info['size_mb']} МБ: {file_info['path']}")
 
